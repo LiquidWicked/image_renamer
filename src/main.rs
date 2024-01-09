@@ -1,7 +1,10 @@
 extern crate exif;
 
-use std::fs;
+use std::fs::{self, rename};
 use std::io::{self, Read};
+use std::io::BufReader;
+
+use exif::{Reader, Value, DateTime, In, Tag};
 
 fn main() -> io::Result<()> {
     let folder_path = "./test";
@@ -15,14 +18,31 @@ fn main() -> io::Result<()> {
                 if extension == "jpg" || extension == "jpeg" {
                     // Open the file
                     let file_path = entry.path();
-                    let mut file = fs::File::open(&file_path)?;
+                    let file = fs::File::open(&file_path)?;
+                    let exif = Reader::new().read_from_container(
+                        &mut BufReader::new(&file)).unwrap();
 
-                    // Read the contents of the file as bytes
-                    let mut contents = Vec::new();
-                    file.read_to_end(&mut contents)?;
-
-                    // Print the file path and the contents in hexadecimal
+                    // Print the file path
                     println!("File: {}", file_path.display());
+
+                    // To parse a DateTime-like field, `DateTime::from_ascii` can be used.
+                    if let Some(field) = exif.get_field(Tag::DateTimeDigitized, In::PRIMARY) {
+                        match field.value {
+                            Value::Ascii(ref vec) if !vec.is_empty() => {
+                                if let Ok(datetime) = DateTime::from_ascii(&vec[0]) {
+                                    let new_filename: String = format!("{}-{}-{} - {}.{}.{}.jpg", datetime.day,
+                                                                                                    datetime.month,
+                                                                                                    datetime.year,
+                                                                                                    datetime.hour,
+                                                                                                    datetime.minute,
+                                                                                                    datetime.second);
+                                    println!("New filename: {}", new_filename);
+                                    fs::rename(file_path, new_filename).unwrap();
+                                }
+                            },
+                            _ => {},
+                        }
+                    }
                 }
             }
         }
